@@ -1,0 +1,89 @@
+var start = '2009-01-01';
+var end = '2024-01-01';
+
+// Region 1: 
+var region = ee.Geometry.Rectangle([-125, 42.5, -112.5, 47]);
+
+// NDVI: MOD13Q1 (16 days, 250m)
+var ndvi_col = ee.ImageCollection('MODIS/006/MOD13Q1')
+  .filterDate(start, end)
+  .filterBounds(region)
+  .select('NDVI');
+
+// To calculate NBR: MOD09A1 (8 days, 500m)
+var modis_raw = ee.ImageCollection("MODIS/006/MOD09A1")
+  .filterDate(start, end)
+  .filterBounds(region);
+
+// NBR Calculation
+function computeNBR(image) {
+  var nir = image.select('sur_refl_b02').multiply(0.0001);
+  var swir = image.select('sur_refl_b07').multiply(0.0001);
+  var nbr = nir.subtract(swir).divide(nir.add(swir)).rename('NBR');
+  return nbr.copyProperties(image, ['system:time_start']);
+}
+
+var nbr_col = modis_raw.map(computeNBR);
+
+// Burned Area: MCD64A1 
+var burned_col = ee.ImageCollection('MODIS/006/MCD64A1')
+  .filterDate(start, end)
+  .filterBounds(region)
+  .select('BurnDate');
+
+function scaleNDVI(img) {
+  return img.multiply(0.0001).copyProperties(img, ['system:time_start']);
+}
+
+// Monthly averages
+var months = ee.List.sequence(2009, 2023).map(function(year) {
+  return ee.List.sequence(1, 12).map(function(month) {
+    var date_start = ee.Date.fromYMD(year, month, 1);
+    var date_end = date_start.advance(1, 'month');
+
+    var ndvi = ndvi_col
+      .filterDate(date_start, date_end)
+      .map(scaleNDVI)
+      .mean()
+      .rename('NDVI');
+
+    var nbr = nbr_col
+      .filterDate(date_start, date_end)
+      .mean()
+      .rename('NBR');
+
+    var burned = burned_col
+      .filterDate(date_start, date_end)
+      .map(function(img) {
+        return img.gt(0); // if burned 1
+      })
+      .sum()
+      .gt(0)
+      .rename('Burned');
+
+    var result = ndvi.addBands(nbr).addBands(burned)
+      .set('date', date_start.format('YYYY-MM-dd'));
+
+    return result;
+  });
+}).flatten();
+
+var monthlyImages = ee.ImageCollection.fromImages(months);
+
+var sampled = monthlyImages.map(function(image) {
+  return image.sample({
+    region: region,
+    scale: 500,
+    geometries: true
+  }).map(function(pt) {
+    return pt.set('date', image.get('date'));
+  });
+}).flatten();
+
+// EXPORT
+Export.table.toDrive({
+  collection: sampled,
+  description: 'FireRisk_Region1_NDVI_NBR_Burned',
+  folder: 'GEE_FireRisk',
+  fileFormat: 'CSV'
+});
