@@ -156,7 +156,6 @@ Pre-trained model weights from the hybrid architecture (CNN + MLP) are available
 
 To run this project, make sure the following Python packages are installed:
 
-```bash
 torch>=1.12  
 torchvision  
 numpy  
@@ -165,9 +164,10 @@ scikit-learn
 matplotlib  
 seaborn  
 opencv-python  
-tqdm  
+tqdm   
 
 ---
+
 ##  Usage (Training)
 
 All training steps are handled inside the notebook `FireRisk_Model.ipynb`.
@@ -181,9 +181,8 @@ Make sure the following inputs are correctly prepared:
 Once everything is ready, launch the notebook and run all cells.  
 Training will proceed with early stopping and model checkpointing enabled.  
 The best performing model (on validation set) will be saved as:
-
-```bash
 best_model_final.pth
+
 
 ##  Results (Test Set Performance)
 
